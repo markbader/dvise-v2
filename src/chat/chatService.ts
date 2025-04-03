@@ -6,7 +6,6 @@ const API_URL = 'https://api.openai.com/v1/chat/completions';
 const chatHistory: { role: 'user' | 'assistant'; content: string }[] = [];
 
 export async function* getChatStream(query: string) {
-    console.log('Sending query to OpenAI API:', query);
     const API_KEY = await vscode.commands.executeCommand('dvise.getApiKey');
 
     // Add user message to history

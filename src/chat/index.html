@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dvise</title>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 0;
+            margin: 0;
+            background-color: var(--vscode-editor-background);
+            color: var(--vscode-editor-foreground);
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        #chatContainer {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        #chat {
+            flex-grow: 1;
+            overflow-y: auto;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid var(--vscode-editorWidget-border);
+            background: var(--vscode-editor-background);
+            color: var(--vscode-editor-foreground);
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        #chat::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        #chat::-webkit-scrollbar-thumb {
+            background-color: var(--vscode-scrollbarSlider-background);
+            border-radius: 4px;
+        }
+
+        #chat::-webkit-scrollbar-track {
+            background-color: var(--vscode-editor-background);
+        }
+
+        .message {
+            padding: 10px 15px;
+            border-radius: 15px;
+            max-width: 70%;
+            word-wrap: break-word;
+            display: inline-block;
+        }
+
+        .user {
+            background-color: var(--vscode-editor-foreground);
+            color: var(--vscode-editor-background);
+            align-self: flex-end;
+            text-align: right;
+        }
+
+        .assistant {
+            background-color: var(--vscode-input-background);
+            color: var(--vscode-input-foreground);
+            align-self: flex-start;
+        }
+
+        #inputContainer {
+            display: flex;
+            align-items: center;
+            padding: 10px;
+            background: var(--vscode-editor-background);
+            border-top: 1px solid var(--vscode-editorWidget-border);
+            position: relative;
+        }
+
+        #userInput {
+            flex-grow: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 20px;
+            outline: none;
+            font-size: 14px;
+            background: var(--vscode-input-background);
+            color: var(--vscode-input-foreground);
+        }
+
+        #sendButton {
+            padding: 10px 15px;
+            margin-left: 8px;
+            cursor: pointer;
+            background-color: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
+            border: none;
+            border-radius: 20px;
+            font-weight: bold;
+        }
+
+        #sendButton:hover {
+            background-color: var(--vscode-button-hoverBackground);
+        }
+
+        .mermaid {
+            display: block;
+            margin: 0 auto;
+            width: 100%;
+            max-width: 100%;
+            background-color: white;
+            border-radius: 8px;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="chat"></div>
+    <div id="inputContainer">
+        <input type="text" id="userInput" placeholder="Ask Dvise ..." />
+        <button id="sendButton">Send</button>
+    </div>
+    <script type="module">
+        import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+        window.mermaid = mermaid;
+        mermaid.initialize({
+            startOnLoad: false,
+        });
+    </script>
+    <script>
+        const vscode = acquireVsCodeApi();
+        let diagramCount = 0;
+
+        function sendMessage() {
+            const inputField = document.getElementById('userInput');
+            const text = inputField.value.trim();
+            if (!text) return;
+            vscode.postMessage({ command: 'sendMessage', text });
+            inputField.value = '';
+        }
+
+        function addMessage(sender, text) {
+            const chatContainer = document.getElementById('chat');
+            const messageBubble = document.createElement('div');
+            messageBubble.classList.add('message', sender);
+            messageBubble.innerHTML = sender === 'user' ? text : marked.parse(text);
+            chatContainer.appendChild(messageBubble);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        function updateOrAddAssistantMessage(text) {
+            const chatContainer = document.getElementById('chat');
+            let lastMessage = chatContainer.querySelector('.message.assistant:not(.finished)');
+
+            if (!lastMessage) {
+                // No unfinished message exists, create a new one
+                lastMessage = document.createElement('div');
+                lastMessage.classList.add('message', 'assistant');
+                lastMessage.dataset.fullText = text; // Store full text in a dataset attribute
+                lastMessage.innerHTML = marked.parse(text);
+                chatContainer.appendChild(lastMessage);
+            } else {
+                // Append new text chunk and re-render markdown
+                lastMessage.dataset.fullText += text;
+                lastMessage.innerHTML = marked.parse(lastMessage.dataset.fullText);
+            }
+
+            // Add logic for mermaid detection
+            // Extract mermaid diagrams and replace them with placeholders
+            const scanText = lastMessage.dataset.fullText
+            const regex = /```mermaid([\s\S]*?)```/g;
+
+            lastMessage.dataset.fullText = lastMessage.dataset.fullText.replace(regex, (match, diagramCode, offset) => {
+                // Replace diagram with a placeholder
+                const diagramId = `mermaid-diagram-${diagramCount++}`;
+                const diagramDiv = `<pre class="mermaid" id="${diagramId}">${diagramCode}</pre>`;
+
+                lastMessage.innerHTML = marked.parse(lastMessage.dataset.fullText.slice(0, offset) + diagramDiv + lastMessage.dataset.fullText.slice(offset + match.length));
+
+                // vscode.postMessage({ command: 'renderDiagram', id: diagramId, diagram: diagramCode });
+                return lastMessage.dataset.fullText.slice(0, offset) + diagramDiv + lastMessage.dataset.fullText.slice(offset + match.length);
+            });
+
+            chatContainer.scrollTop = chatContainer.scrollHeight; // Auto-scroll to latest message
+        }
+
+        function markLastAssistantMessageAsFinished() {
+            const chatContainer = document.getElementById('chat');
+            let lastMessage = chatContainer.querySelector('.message.assistant:not(.finished)');
+
+            if (lastMessage) {
+                lastMessage.classList.add('finished');
+                // Ensure Mermaid is available before calling run()
+                if (window.mermaid) {
+                    setTimeout(() => {
+                        window.mermaid.init();
+                    }, 0);
+                } else {
+                    console.warn("Mermaid is not loaded yet!");
+                }
+            }
+        }
+
+        window.addEventListener('message', event => {
+            const message = event.data;
+            if (message.command === 'userMessage') {
+                addMessage('user', message.text);
+            } else if (message.command === 'addResponseChunk') {
+                updateOrAddAssistantMessage(message.text);
+            } else if (message.command === 'finishResponse') {
+                markLastAssistantMessageAsFinished();
+            }
+        });
+
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('sendButton').addEventListener('click', sendMessage);
+            document.getElementById('userInput').addEventListener('keypress', (event) => {
+                if (event.key === 'Enter') sendMessage();
+            });
+        });
+    </script>
+</body>
+
+</html>
