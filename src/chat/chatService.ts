@@ -1,19 +1,29 @@
 import axios from 'axios';
 import * as vscode from 'vscode';
+// import { getAllFilesInWorkspace } from '../chat/chatContext';
 
 const API_URL = 'https://api.openai.com/v1/chat/completions';
+const chatHistory: { role: 'user' | 'assistant' | 'system'; content: string }[] = [{ role: 'system', content: `You are a mentor while the user is a junior software engineer. The user is trying to understand a software project. You get all files related to this project in this chat and the source code the user refers to together with his message. You answer each question, fitting to the content and tailored to a junior software engineer. You are capable of rendering mermaid diagrams. Whenever it might help generate mermaid source code within a \`\`\`mermaid ... \`\`\` environment. Let's start!\n\n` }];
+// await (async () => {
+//     const chatHistory = 
+//     const context = await getAllFilesInWorkspace();
+//     for (const item of context) {
+//         const { role, content } = item;
+//         chatHistory.push({ role: role, content: content });
+//     }
+// })();
 
-const chatHistory: { role: 'user' | 'assistant'; content: string }[] = [];
-
-export async function* getChatStream(query: string) {
+export async function* getChatStream(query: string, withHistory: boolean = true): AsyncGenerator<string> {
     const API_KEY = await vscode.commands.executeCommand('dvise.getApiKey');
 
     // Add user message to history
-    chatHistory.push({ role: 'user', content: query });
+    if (withHistory) {
+        chatHistory.push({ role: 'user', content: query });
+    }
 
     const response = await axios.post(API_URL, {
         model: 'gpt-4',
-        messages: chatHistory,
+        messages: withHistory ? chatHistory : [{ role: 'user', content: query }],
         stream: true
     }, {
         headers: {

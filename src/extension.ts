@@ -28,6 +28,8 @@ export async function activate(context: vscode.ExtensionContext) {
 		vscode.commands.executeCommand('dvise.setApiKey');
 	}
 
+	// 
+
 	// Register file explorer
 	const fileExplorer = new FileExplorerView(context);
 	context.subscriptions.push(vscode.window.registerTreeDataProvider('dvise.fileExplorer', fileExplorer));
@@ -48,9 +50,19 @@ export async function activate(context: vscode.ExtensionContext) {
 	// Open chat panel automatically when extension starts
 	vscode.commands.executeCommand('dvise.openChat');
 
+	// Register command to visualize code
+	context.subscriptions.push(vscode.commands.registerCommand('dvise.visualizeCode', async (args) => {
+		if (!args || !args.text || !args.document) {
+			vscode.window.showErrorMessage('No code to visualize.');
+			return;
+		}
+		ChatPanel.handleMessage({ command: "dvise.sendMessage", text: `Visualize the following code: \n\n\`\`\`${args.document.languageId}\n${args.text}\`\`\`` });
+	}));
+
 
 	// Register hover provider
 	context.subscriptions.push(vscode.languages.registerHoverProvider({ scheme: 'file', language: '*' }, new HoverProvider()));
+
 
 }
 

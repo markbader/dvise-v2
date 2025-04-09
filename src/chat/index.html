@@ -53,24 +53,32 @@
         }
 
         .message {
-            padding: 10px 15px;
-            border-radius: 15px;
-            max-width: 70%;
+            padding: 2px 10px;
+            border-radius: 18px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            max-width: 80%;
             word-wrap: break-word;
             display: inline-block;
         }
 
         .user {
-            background-color: var(--vscode-editor-foreground);
-            color: var(--vscode-editor-background);
+            background-color: rgba(0, 183, 255, 0.05);
+            color: var(--vscode-input-foreground);
             align-self: flex-end;
-            text-align: right;
+            background-blend-mode: overlay;
+            border: 1px solid rgba(0, 183, 255, 0.1);
         }
 
         .assistant {
-            background-color: var(--vscode-input-background);
+            background-color: rgba(0, 255, 106, 0.05);
             color: var(--vscode-input-foreground);
             align-self: flex-start;
+            background-blend-mode: overlay;
+            border: 1px solid rgba(0, 255, 106, 0.1);
+            width: 100%;
+            box-sizing: border-box;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
         }
 
         #inputContainer {
@@ -110,11 +118,13 @@
 
         .mermaid {
             display: block;
-            margin: 0 auto;
             width: 100%;
             max-width: 100%;
+            overflow-x: auto;
             background-color: white;
             border-radius: 8px;
+            padding: 8px;
+            box-sizing: border-box;
         }
     </style>
 </head>
@@ -140,7 +150,7 @@
             const inputField = document.getElementById('userInput');
             const text = inputField.value.trim();
             if (!text) return;
-            vscode.postMessage({ command: 'sendMessage', text });
+            vscode.postMessage({ command: 'dvise.sendMessage', text });
             inputField.value = '';
         }
 
@@ -148,72 +158,157 @@
             const chatContainer = document.getElementById('chat');
             const messageBubble = document.createElement('div');
             messageBubble.classList.add('message', sender);
-            messageBubble.innerHTML = sender === 'user' ? text : marked.parse(text);
+            messageBubble.innerHTML = marked.parse(text);
             chatContainer.appendChild(messageBubble);
             chatContainer.scrollTop = chatContainer.scrollHeight;
         }
 
-        function updateOrAddAssistantMessage(text) {
+        function updateOrAddAssistantMessage(text, messageId) {
             const chatContainer = document.getElementById('chat');
-            let lastMessage = chatContainer.querySelector('.message.assistant:not(.finished)');
+            let message = chatContainer.querySelector(`.message.assistant[data-message-id="${messageId}"]`);
 
-            if (!lastMessage) {
-                // No unfinished message exists, create a new one
-                lastMessage = document.createElement('div');
-                lastMessage.classList.add('message', 'assistant');
-                lastMessage.dataset.fullText = text; // Store full text in a dataset attribute
-                lastMessage.innerHTML = marked.parse(text);
-                chatContainer.appendChild(lastMessage);
+            if (!message) {
+                // No message with this ID, create a new one
+                message = document.createElement('div');
+                message.classList.add('message', 'assistant');
+                message.dataset.messageId = messageId;
+                message.dataset.fullText = text;
+                message.innerHTML = marked.parse(text);
+                chatContainer.appendChild(message);
             } else {
-                // Append new text chunk and re-render markdown
-                lastMessage.dataset.fullText += text;
-                lastMessage.innerHTML = marked.parse(lastMessage.dataset.fullText);
+                // Append new text chunk
+                message.dataset.fullText += text;
+                message.innerHTML = marked.parse(message.dataset.fullText);
             }
 
-            // Add logic for mermaid detection
-            // Extract mermaid diagrams and replace them with placeholders
-            const scanText = lastMessage.dataset.fullText
+            // Mermaid diagram replacement
             const regex = /```mermaid([\s\S]*?)```/g;
-
-            lastMessage.dataset.fullText = lastMessage.dataset.fullText.replace(regex, (match, diagramCode, offset) => {
-                // Replace diagram with a placeholder
+            message.dataset.fullText = message.dataset.fullText.replace(regex, (match, diagramCode, offset) => {
                 const diagramId = `mermaid-diagram-${diagramCount++}`;
                 const diagramDiv = `<pre class="mermaid" id="${diagramId}">${diagramCode}</pre>`;
-
-                lastMessage.innerHTML = marked.parse(lastMessage.dataset.fullText.slice(0, offset) + diagramDiv + lastMessage.dataset.fullText.slice(offset + match.length));
-
-                // vscode.postMessage({ command: 'renderDiagram', id: diagramId, diagram: diagramCode });
-                return lastMessage.dataset.fullText.slice(0, offset) + diagramDiv + lastMessage.dataset.fullText.slice(offset + match.length);
+                message.innerHTML = marked.parse(
+                    message.dataset.fullText.slice(0, offset) + diagramDiv + message.dataset.fullText.slice(offset + match.length)
+                );
+                return diagramDiv;
             });
 
-            chatContainer.scrollTop = chatContainer.scrollHeight; // Auto-scroll to latest message
+            chatContainer.scrollTop = chatContainer.scrollHeight;
         }
 
-        function markLastAssistantMessageAsFinished() {
+        function markLastAssistantMessageAsFinished(messageId, context) {
             const chatContainer = document.getElementById('chat');
-            let lastMessage = chatContainer.querySelector('.message.assistant:not(.finished)');
+            const message = chatContainer.querySelector(`.message.assistant[data-message-id="${messageId}"]`);
 
-            if (lastMessage) {
-                lastMessage.classList.add('finished');
-                // Ensure Mermaid is available before calling run()
-                if (window.mermaid) {
-                    setTimeout(() => {
-                        window.mermaid.init();
-                    }, 0);
-                } else {
-                    console.warn("Mermaid is not loaded yet!");
+            if (message) {
+                message.classList.add('finished');
+
+                // Add context to dataset
+                for (const [key, value] of Object.entries(context)) {
+                    message.dataset[key] = typeof value === 'object' ? JSON.stringify(value) : value;
                 }
+
+                // Find all mermaid elements in this message
+                const diagramElements = message.querySelectorAll('.mermaid');
+
+                diagramElements.forEach((element, index) => {
+                    const tryRender = async (code, attempts = 0) => {
+                        if (window.mermaid) {
+                            try {
+                                // Manually render the diagram
+                                console.log('attempt: ', attempts);
+                                await window.mermaid.run({ nodes: [element] });
+                                console.log('Mermaid render successful');
+                            } catch (error) {
+                                console.warn(`Mermaid render failed: ${error.message}`);
+
+                                if (attempts < 3) {
+                                    console.log(`Retrying mermaid render... attempt ${attempts + 1}`);
+                                    const cleaned = await cleanupMermaidCode(code, error.message);
+                                    console.log('Cleaned mermaid code: ', cleaned);
+                                    element.textContent = cleaned;
+                                    element.removeAttribute('data-processed');
+                                    tryRender(cleaned, attempts + 1);
+                                } else {
+                                    element.innerHTML = `<pre style="color:red;">Failed to render mermaid diagram after 3 attempts</pre>`;
+                                }
+                            }
+                        } else {
+                            return console.warn('Mermaid is not loaded yet');
+                        }
+
+                    };
+
+                    const diagramCode = element.textContent || '';
+                    console.log('Rendering diagram code: ', diagramCode);
+                    tryRender(diagramCode);
+                });
             }
         }
+
+        function cleanupMermaidCode(code, message) {
+            console.log('Failed to render code: ', code);
+
+            const prompt = `The following mermaid code failed to render: \n\n\`\`\`mermaid\n${code}\n\`\`\`\n\nPlease provide a cleaned-up version of the code that can be rendered. The error message is:\n\n${message}`;
+
+            // Create a promise that will resolve when the webview responds
+            return new Promise((resolve, reject) => {
+                // Send a message to the webview (chat panel) asking for the cleanup action
+                const messageId = `cleanup-${Date.now()}`;
+
+                vscode.postMessage({
+                    command: 'dvise.cleanupMermaidCode',
+                    messageId: messageId,
+                    prompt: prompt,
+                });
+
+                // Listen for the response from the webview (chat panel)
+                const handleResponse = (event) => {
+                    if (event.data.command === 'dvise.cleanupResponse' && event.data.messageId === messageId) {
+                        console.log('Received cleanup response:', event.data);
+                        window.removeEventListener('message', handleResponse);
+
+                        if (event.data.error) {
+                            reject(new Error(event.data.error));  // Reject the promise if an error is returned
+                        } else {
+                            const mermaidMatches = extractMermaidCode(event.data.response);
+                            resolve(mermaidMatches);  // Resolve the promise with the response from the webview
+                        }
+                    }
+                };
+
+                window.addEventListener('message', handleResponse);
+            });
+        }
+
+        function extractMermaidCode(text) {
+            const mermaidRegex = /```mermaid([\s\S]*?)```/g;
+
+            const match = mermaidRegex.exec(text)[1].trim()
+            console.log('Refined mermaid code: ', match);
+            return match;
+        };
 
         window.addEventListener('message', event => {
             const message = event.data;
-            if (message.command === 'userMessage') {
+            if (message.command === 'dvise.userMessage') {
                 addMessage('user', message.text);
-            } else if (message.command === 'addResponseChunk') {
-                updateOrAddAssistantMessage(message.text);
-            } else if (message.command === 'finishResponse') {
-                markLastAssistantMessageAsFinished();
+            } else if (message.command === 'dvise.addResponseChunk') {
+                updateOrAddAssistantMessage(message.text, message.messageId);
+            } else if (message.command === 'dvise.finishResponse') {
+                markLastAssistantMessageAsFinished(message.messageId, message.context);
+            } else if (message.command === 'dvise.refineResponse') {
+                const refinedText = message.text;
+                const messageId = message.messageId;
+
+                // Find the assistant message and update it
+                const chatContainer = document.getElementById('chat');
+                const messageElement = chatContainer.querySelector(`.message.assistant[data-message-id="${messageId}"]`);
+
+                if (messageElement) {
+                    messageElement.innerHTML = refinedText;
+                }
+            } else if (message.command === 'dvise.error') {
+                console.error('Error from Dvise:', message.text);
             }
         });
 
