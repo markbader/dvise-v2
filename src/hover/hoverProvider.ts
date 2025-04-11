@@ -17,7 +17,7 @@ export class HoverProvider implements vscode.HoverProvider {
 
         if (isSelection) {
             const markdown = new vscode.MarkdownString(
-                `[✨ Visualize](command:dvise.visualizeCode?${encodeURIComponent(JSON.stringify({ text: selectedText, document: document }))})`
+                `[✨ Visualize](command:dvise.visualizeCode?${encodeURIComponent(JSON.stringify({ text: selectedText, document: document, startLine: startLine }))})`
             );
             markdown.isTrusted = true;
             return new vscode.Hover(markdown);

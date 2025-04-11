@@ -195,7 +195,7 @@
             chatContainer.scrollTop = chatContainer.scrollHeight;
         }
 
-        function markLastAssistantMessageAsFinished(messageId, context) {
+        function markAssistantMessageAsFinished(messageId, context) {
             const chatContainer = document.getElementById('chat');
             const message = chatContainer.querySelector(`.message.assistant[data-message-id="${messageId}"]`);
 
@@ -203,9 +203,13 @@
                 message.classList.add('finished');
 
                 // Add context to dataset
-                for (const [key, value] of Object.entries(context)) {
-                    message.dataset[key] = typeof value === 'object' ? JSON.stringify(value) : value;
+                if (context) {
+                    message.dataset.file = context.file || '';
+                    message.dataset.contextText = context.text || '';
+                    message.dataset.startLine = context.startLine || 0;
+                    console.log('Context added to message: ', context);
                 }
+
 
                 // Find all mermaid elements in this message
                 const diagramElements = message.querySelectorAll('.mermaid');
@@ -215,21 +219,43 @@
                         if (window.mermaid) {
                             try {
                                 // Manually render the diagram
-                                console.log('attempt: ', attempts);
                                 await window.mermaid.run({ nodes: [element] });
-                                console.log('Mermaid render successful');
+                                // render was successful
+                                // Select all mermaid nodes and add hover events for them
+                                try {
+                                    const nodesGroup = element.querySelector('g.nodes');
+                                    console.log('nodesGroup: ', nodesGroup);
+
+                                    if (nodesGroup) {
+                                        // Select all <g> elements inside "nodes" that are actual nodes
+                                        const nodeElements = nodesGroup.querySelectorAll('g.node');
+                                        let nodeLabelTexts = [];
+                                        nodeElements.forEach((node) => {
+                                            // Find the <span class="nodeLabel"> inside the <foreignObject>
+                                            const nodeLabelSpan = node.querySelector('span.nodeLabel');
+                                            if (nodeLabelSpan) {
+                                                nodeLabelTexts.push(nodeLabelSpan.textContent);
+                                            }
+                                        })
+                                        console.log('nodeLabelTexts: ', nodeLabelTexts);
+                                        // ToDo: Start a request to ChatGPT to get a node - line - description mapping
+                                        if (context) {
+                                            getNodeDescriptionMapping({ file: message.dataset.file, text: message.dataset.contextText, startLine: message.dataset.startLine, diagram: element.textContent, diagramId: element.getAttribute("id"), nodeNames: nodeLabelTexts })
+                                        }
+                                    }
+                                } catch (error) {
+                                    console.error('Error adding hover events: ', error);
+                                }
                             } catch (error) {
                                 console.warn(`Mermaid render failed: ${error.message}`);
 
-                                if (attempts < 3) {
-                                    console.log(`Retrying mermaid render... attempt ${attempts + 1}`);
+                                if (attempts < 5) {
                                     const cleaned = await cleanupMermaidCode(code, error.message);
-                                    console.log('Cleaned mermaid code: ', cleaned);
                                     element.textContent = cleaned;
                                     element.removeAttribute('data-processed');
                                     tryRender(cleaned, attempts + 1);
                                 } else {
-                                    element.innerHTML = `<pre style="color:red;">Failed to render mermaid diagram after 3 attempts</pre>`;
+                                    element.innerHTML = `<pre style="color:red;">Failed to render mermaid diagram after 5 attempts</pre>`;
                                 }
                             }
                         } else {
@@ -239,7 +265,6 @@
                     };
 
                     const diagramCode = element.textContent || '';
-                    console.log('Rendering diagram code: ', diagramCode);
                     tryRender(diagramCode);
                 });
             }
@@ -280,13 +305,116 @@
             });
         }
 
-        function extractMermaidCode(text) {
-            const mermaidRegex = /```mermaid([\s\S]*?)```/g;
+        function showTooltip(target, text) {
+            let tooltip = document.createElement('div');
+            tooltip.className = 'tooltip';
+            tooltip.innerText = text;
+            tooltip.style.position = 'absolute';
+            tooltip.style.background = 'rgba(0,0,0,0.7)';
+            tooltip.style.color = 'white';
+            tooltip.style.padding = '5px';
+            tooltip.style.borderRadius = '4px';
+            tooltip.style.zIndex = '1000';
+            tooltip.style.pointerEvents = 'none';
 
-            const match = mermaidRegex.exec(text)[1].trim()
-            console.log('Refined mermaid code: ', match);
-            return match;
+            document.body.appendChild(tooltip);
+
+            const rect = target.getBoundingClientRect();
+            tooltip.style.top = `${rect.top + window.scrollY - 10}px`;
+            tooltip.style.left = `${rect.left + window.scrollX + rect.width / 2}px`;
+
+            target._tooltip = tooltip;
+        }
+
+        function hideTooltip() {
+            const tooltips = document.querySelectorAll('.tooltip');
+            tooltips.forEach(t => t.remove());
+        }
+
+
+        function extractMermaidCode(text) {
+            try {
+                const mermaidRegex = /```mermaid([\s\S]*?)```/g;
+
+                const match = mermaidRegex.exec(text)[1].trim()
+                console.log('Refined mermaid code: ', match);
+                return match;
+            } catch (error) {
+                console.error('Error extracting mermaid code:', error);
+                return text; // Return the original text if extraction fails
+            }
         };
+
+        function getNodeDescriptionMapping(context) {
+            const messageId = `node-descriptions-${Date.now()}`
+            const file = context.file;
+            const text = context.text;
+            const startLine = context.startLine;
+            const diagram = context.diagram;
+            const diagramId = context.diagramId;
+            const nodeNames = context.nodeNames;
+
+            vscode.postMessage({
+                command: 'dvise.getNodeDescriptions',
+                messageId: messageId,
+                context: {
+                    file: file,
+                    text: text,
+                    startLine: startLine,
+                    diagram: diagram,
+                    diagramId: diagramId,
+                    nodeNames: nodeNames,
+                }
+            });
+
+            const handleResponse = (event) => {
+                console.log('Received response for node descriptions:', event.data);
+                if (event.data.command === 'dvise.setNodeDescriptions' && event.data.messageId === messageId) {
+                    console.log("This is the right message ^^")
+                    window.removeEventListener('message', handleResponse);
+
+                    if (!event.data.error) {
+                        const descriptionMap = event.data.mapping
+                        setTimeout(() => {
+                            const diagramElement = document.getElementById(diagramId);
+
+                            if (diagramElement) {
+                                console.log("found diagram! ^^")
+                                const nodesGroup = diagramElement.querySelector('g.nodes');
+                                if (!nodesGroup) return;
+
+                                const nodeElements = nodesGroup.querySelectorAll('g.node');
+                                nodeElements.forEach((node) => {
+                                    const labelElement = node.querySelector('span.nodeLabel');
+                                    const label = labelElement?.textContent?.trim();
+
+                                    if (label && descriptionMap[label]) {
+                                        node.addEventListener('mouseenter', () => {
+                                            showTooltip(node, descriptionMap[label].text);
+                                            console.log(descriptionMap[label].file);
+                                            vscode.postMessage({
+                                                command: "dvise.highlightLine",
+                                                file: descriptionMap[label].file,
+                                                start: descriptionMap[label].start,
+                                                end: descriptionMap[label].end
+                                            })
+                                        });
+
+                                        node.addEventListener('mouseleave', () => {
+                                            hideTooltip();
+                                        });
+                                    }
+                                });
+                            } else {
+                                console.warn(`Diagram with id ${diagramId} not found.`);
+                            }
+                        }, 100); // Delay to allow rendering
+                    }
+                }
+            };
+
+            window.addEventListener('message', handleResponse);
+        }
 
         window.addEventListener('message', event => {
             const message = event.data;
@@ -295,7 +423,7 @@
             } else if (message.command === 'dvise.addResponseChunk') {
                 updateOrAddAssistantMessage(message.text, message.messageId);
             } else if (message.command === 'dvise.finishResponse') {
-                markLastAssistantMessageAsFinished(message.messageId, message.context);
+                markAssistantMessageAsFinished(message.messageId, message.context);
             } else if (message.command === 'dvise.refineResponse') {
                 const refinedText = message.text;
                 const messageId = message.messageId;

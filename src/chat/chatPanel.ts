@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { getChatStream } from './chatService';
+import { getChatStream, getDiagramCodeMapping } from './chatService';
 import * as path from 'path';
 import * as fs from 'fs';
 
@@ -38,7 +38,7 @@ export class ChatPanel {
         }
     }
 
-    public static async handleMessage(message: any, context: { file?: string, text?: string } = {}) {
+    public static async handleMessage(message: any) {
         const currentMessageId = ChatPanel.messageIdCounter++;
         if (!ChatPanel.panel) return;
         const webview = ChatPanel.panel.webview;
@@ -55,7 +55,7 @@ export class ChatPanel {
                 webview.postMessage({ command: 'dvise.addResponseChunk', text: chunk, messageId: currentMessageId });
             }
 
-            webview.postMessage({ command: 'dvise.finishResponse', messageId: currentMessageId, context: context });
+            webview.postMessage({ command: 'dvise.finishResponse', messageId: currentMessageId, context: message.context });
         } else if (message.command === 'dvise.cleanupMermaidCode') {
             const { messageId, prompt } = message;
             console.log('Received cleanup request:', messageId, prompt);
@@ -65,21 +65,18 @@ export class ChatPanel {
                 response += chunk;
             }
             webview.postMessage({ command: 'dvise.cleanupResponse', messageId: messageId, response: response });
+        } else if (message.command === 'dvise.getNodeDescriptions') {
+            const response = await getDiagramCodeMapping(message.context);
+            console.log("Received node descriptions:", response);
+            webview.postMessage({
+                command: 'dvise.setNodeDescriptions', messageId: message.messageId, mapping: response
+            })
+        } else if (message.command === "dvise.highlightLine") {
+            console.log("Received highlight line request:", message);
+            highlightLine(message.file, message.start, message.end);
         }
     }
 
-    public static async handleRefineMessage(message: string): Promise<string> {
-        if (!ChatPanel.panel) return "";
-        const webview = ChatPanel.panel.webview;
-
-        let responseText = "";
-
-        const chatStream = getChatStream(message, false);
-        for await (const chunk of chatStream) {
-            responseText += chunk;
-        }
-        return responseText;
-    }
 
     private getHtml(): string {
         // Get path to index.html
@@ -93,4 +90,47 @@ export class ChatPanel {
             return `<html><body><h1>Error loading chat panel</h1></body></html>`;
         }
     }
+}
+
+async function highlightLine(filePath: string, start: number, end: number) {
+    console.log(filePath)
+
+    let document = await vscode.workspace.openTextDocument(vscode.Uri.parse(filePath));
+    let editor = vscode.window.visibleTextEditors.find(ed => ed.document.uri.fsPath === filePath);
+
+    // If the file is not already open, open it in an editor
+    if (!editor) {
+        editor = await vscode.window.showTextDocument(document, vscode.ViewColumn.One);
+    } else {
+        await vscode.window.showTextDocument(editor.document, vscode.ViewColumn.One);
+    }
+
+    if (!editor) {
+        vscode.window.showErrorMessage("Unable to open the file.");
+        return;
+    }
+
+    const range = new vscode.Range(
+        start,
+        0,
+        end,
+        editor.document.lineAt(end).text.length
+    );
+
+
+    // Create a decoration type with a background color
+    const decorationType = vscode.window.createTextEditorDecorationType({
+        backgroundColor: "rgba(255, 165, 0, 0.3)", // Light orange highlight
+        isWholeLine: true // Highlights the full line
+    });
+
+    // Apply the decoration
+    editor.setDecorations(decorationType, [range]);
+
+    // Scroll to the line and center it in the editor
+    editor.revealRange(range, vscode.TextEditorRevealType.InCenter);
+
+    setTimeout(() => {
+        editor?.setDecorations(decorationType, []); // Clear decoration
+    }, 3000);
 }

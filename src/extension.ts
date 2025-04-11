@@ -52,11 +52,11 @@ export async function activate(context: vscode.ExtensionContext) {
 
 	// Register command to visualize code
 	context.subscriptions.push(vscode.commands.registerCommand('dvise.visualizeCode', async (args) => {
-		if (!args || !args.text || !args.document) {
+		if (!args || !args.text || !args.document || !args.startLine) {
 			vscode.window.showErrorMessage('No code to visualize.');
 			return;
 		}
-		ChatPanel.handleMessage({ command: "dvise.sendMessage", text: `Visualize the following code: \n\n\`\`\`${args.document.languageId}\n${args.text}\`\`\`` });
+		ChatPanel.handleMessage({ command: "dvise.sendMessage", text: `Visualize the following code: \n\n\`\`\`${args.document.languageId}\n${args.text}\`\`\``, context: { file: args.document.uri.toString(), startLine: args.startLine, text: `\`\`\`${args.document.languageId}\n${args.text}\n\`\`\`` } });
 	}));
 
 
