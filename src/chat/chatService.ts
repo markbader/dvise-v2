@@ -40,7 +40,7 @@ async function* getResponse(history: { role: 'user' | 'assistant' | 'system'; co
     const API_KEY = await vscode.commands.executeCommand('dvise.getApiKey');
 
     const response = await axios.post(API_URL, {
-        model: 'gpt-4',
+        model: 'gpt-4.1-nano',
         messages: history,
         stream: stream
     }, {
@@ -97,26 +97,24 @@ export async function getDiagramCodeMapping(context: any): Promise<Map<string, {
     const nodeNames = context.nodeNames;
     let tempHistory: { role: 'user' | 'assistant' | 'system'; content: string }[] = [];
 
-    // This follows the chain of thoughts pattern to get a mapping of nodes to source code
-    // First I ask the assistant to annotate the source code with line numbers
-    tempHistory.push({ role: 'user', content: `Please add zero-indexed line numbers to this piece of source code:\n${sourceCode}` });
+    // First I add line numbers to the source code
+    let sourceCodeWithLineNumbers = '';
+    sourceCode.split('\n').forEach((line: string, index: number) => {
+        if (index === 0) {
+            sourceCodeWithLineNumbers += `${line}\n`;
+            return
+        }
+        sourceCodeWithLineNumbers += `${index - 1}${line}\n`;
+    })
 
+    // Then I give source code with line numbers and diagram nodes to AI model and ask it to map the nodes to line ranges
+    const nodesList = nodeNames.map((node: string) => `\n${node}`).join('');
+    tempHistory.push({ role: 'user', content: `This is source code with zero-indexed line numbers:\n${sourceCodeWithLineNumbers}This is a mermaid diagram explaining the code:\n\`\`\`mermaid\n${diagram}\n\`\`\`. It contains these nodes: ${nodesList}\n\nGive me a json dict in a \`\`\`json environment, that contains every node name as key, and a dict {startLine: number, endLine: number, description: string} as value. The startLine should be the first line of code the node refers to, the endLine is the last line and description should be a two sentence summery of the nodes meaning.` });
     let assistantContent = '';
     for await (const chunk of getResponse(tempHistory, false)) {
         assistantContent += chunk;
     }
     tempHistory.push({ role: 'assistant', content: assistantContent });
-
-    // Then I give it the diagram nodes and ask it to map the nodes to line ranges
-    const nodesList = nodeNames.map((node: string) => `\n${node}`).join('');
-    tempHistory.push({ role: 'user', content: `This is a mermaid diagram explaining the code:\n\`\`\`mermaid\n${diagram}\n\`\`\`. It contains these nodes: ${nodesList}\n\nGive me a json dict in a \`\`\`json environment, that contains every node name as key, and a dict {startLine: number, endLine: number, description: string} as value. The startLine should be the first line of code the node refers to, the endLine is the last line and description should be a two sentence summery of the nodes meaning.` });
-    assistantContent = '';
-    for await (const chunk of getResponse(tempHistory, false)) {
-        assistantContent += chunk;
-    }
-    tempHistory.push({ role: 'assistant', content: assistantContent });
-
-    console.log(tempHistory);
 
     // Parse the JSON response from the assistant
     const jsonResponse = extractJsonFromResponse(assistantContent);
@@ -144,7 +142,6 @@ function extractJsonFromResponse(response: string): [any, boolean] {
 
         try {
             const parsed = JSON.parse(jsonStr);
-            console.log("Parsed JSON:", parsed);
             return [parsed, true];
         } catch (error) {
             console.error("Failed to parse JSON:", error, "\nJSON string was:", jsonStr);

@@ -42,9 +42,9 @@ export class ChatPanel {
         const currentMessageId = ChatPanel.messageIdCounter++;
         if (!ChatPanel.panel) return;
         const webview = ChatPanel.panel.webview;
+        console.log(`${message.command} message received:`, message);
 
         if (message.command === 'dvise.sendMessage') {
-            console.log('Received message:', message);
             // Send the message to the webview
             const userMessage = message.text;
             webview.postMessage({ command: 'dvise.userMessage', text: userMessage });
@@ -58,7 +58,6 @@ export class ChatPanel {
             webview.postMessage({ command: 'dvise.finishResponse', messageId: currentMessageId, context: message.context });
         } else if (message.command === 'dvise.cleanupMermaidCode') {
             const { messageId, prompt } = message;
-            console.log('Received cleanup request:', messageId, prompt);
             let response = ""
             const chatStream = getChatStream(prompt, false);
             for await (const chunk of chatStream) {
@@ -67,12 +66,10 @@ export class ChatPanel {
             webview.postMessage({ command: 'dvise.cleanupResponse', messageId: messageId, response: response });
         } else if (message.command === 'dvise.getNodeDescriptions') {
             const response = await getDiagramCodeMapping(message.context);
-            console.log("Received node descriptions:", response);
             webview.postMessage({
                 command: 'dvise.setNodeDescriptions', messageId: message.messageId, mapping: response
             })
         } else if (message.command === "dvise.highlightLine") {
-            console.log("Received highlight line request:", message);
             highlightLine(message.file, message.start, message.end);
         }
     }
@@ -93,8 +90,6 @@ export class ChatPanel {
 }
 
 async function highlightLine(filePath: string, start: number, end: number) {
-    console.log(filePath)
-
     let document = await vscode.workspace.openTextDocument(vscode.Uri.parse(filePath));
     let editor = vscode.window.visibleTextEditors.find(ed => ed.document.uri.fsPath === filePath);
 

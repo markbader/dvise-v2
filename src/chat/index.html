@@ -56,7 +56,7 @@
             padding: 2px 10px;
             border-radius: 18px;
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-            max-width: 80%;
+            max-width: 95%;
             word-wrap: break-word;
             display: inline-block;
         }
@@ -207,7 +207,6 @@
                     message.dataset.file = context.file || '';
                     message.dataset.contextText = context.text || '';
                     message.dataset.startLine = context.startLine || 0;
-                    console.log('Context added to message: ', context);
                 }
 
 
@@ -224,7 +223,6 @@
                                 // Select all mermaid nodes and add hover events for them
                                 try {
                                     const nodesGroup = element.querySelector('g.nodes');
-                                    console.log('nodesGroup: ', nodesGroup);
 
                                     if (nodesGroup) {
                                         // Select all <g> elements inside "nodes" that are actual nodes
@@ -237,7 +235,6 @@
                                                 nodeLabelTexts.push(nodeLabelSpan.textContent);
                                             }
                                         })
-                                        console.log('nodeLabelTexts: ', nodeLabelTexts);
                                         // ToDo: Start a request to ChatGPT to get a node - line - description mapping
                                         if (context) {
                                             getNodeDescriptionMapping({ file: message.dataset.file, text: message.dataset.contextText, startLine: message.dataset.startLine, diagram: element.textContent, diagramId: element.getAttribute("id"), nodeNames: nodeLabelTexts })
@@ -271,7 +268,6 @@
         }
 
         function cleanupMermaidCode(code, message) {
-            console.log('Failed to render code: ', code);
 
             const prompt = `The following mermaid code failed to render: \n\n\`\`\`mermaid\n${code}\n\`\`\`\n\nPlease provide a cleaned-up version of the code that can be rendered. The error message is:\n\n${message}`;
 
@@ -289,7 +285,6 @@
                 // Listen for the response from the webview (chat panel)
                 const handleResponse = (event) => {
                     if (event.data.command === 'dvise.cleanupResponse' && event.data.messageId === messageId) {
-                        console.log('Received cleanup response:', event.data);
                         window.removeEventListener('message', handleResponse);
 
                         if (event.data.error) {
@@ -337,7 +332,6 @@
                 const mermaidRegex = /```mermaid([\s\S]*?)```/g;
 
                 const match = mermaidRegex.exec(text)[1].trim()
-                console.log('Refined mermaid code: ', match);
                 return match;
             } catch (error) {
                 console.error('Error extracting mermaid code:', error);
@@ -368,9 +362,7 @@
             });
 
             const handleResponse = (event) => {
-                console.log('Received response for node descriptions:', event.data);
                 if (event.data.command === 'dvise.setNodeDescriptions' && event.data.messageId === messageId) {
-                    console.log("This is the right message ^^")
                     window.removeEventListener('message', handleResponse);
 
                     if (!event.data.error) {
@@ -379,7 +371,6 @@
                             const diagramElement = document.getElementById(diagramId);
 
                             if (diagramElement) {
-                                console.log("found diagram! ^^")
                                 const nodesGroup = diagramElement.querySelector('g.nodes');
                                 if (!nodesGroup) return;
 
@@ -391,7 +382,6 @@
                                     if (label && descriptionMap[label]) {
                                         node.addEventListener('mouseenter', () => {
                                             showTooltip(node, descriptionMap[label].text);
-                                            console.log(descriptionMap[label].file);
                                             vscode.postMessage({
                                                 command: "dvise.highlightLine",
                                                 file: descriptionMap[label].file,

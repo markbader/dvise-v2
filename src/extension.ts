@@ -1,7 +1,8 @@
 import * as vscode from 'vscode';
 import { FileExplorerView } from './fileExplorer/fileExplorerView';
 import { ChatPanel } from './chat/chatPanel';
-import { HoverProvider } from './hover/hoverProvider';
+import { HoverProvider } from './editor/hoverProvider';
+import { VisualizeCodeLensProvider } from './editor/codelensProvider';
 
 export async function activate(context: vscode.ExtensionContext) {
 
@@ -62,6 +63,9 @@ export async function activate(context: vscode.ExtensionContext) {
 
 	// Register hover provider
 	context.subscriptions.push(vscode.languages.registerHoverProvider({ scheme: 'file', language: '*' }, new HoverProvider()));
+
+	// Register code lens provider for python, javascript, and java
+	context.subscriptions.push(vscode.languages.registerCodeLensProvider({ scheme: 'file', language: '*' }, new VisualizeCodeLensProvider()));
 
 
 }
