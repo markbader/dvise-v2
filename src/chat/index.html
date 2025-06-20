@@ -19,13 +19,6 @@
             overflow: hidden;
         }
 
-        #chatContainer {
-            display: flex;
-            flex-direction: column;
-            height: 100%;
-            overflow: hidden;
-        }
-
         #chat {
             flex-grow: 1;
             overflow-y: auto;
@@ -37,6 +30,11 @@
             display: flex;
             flex-direction: column;
             gap: 8px;
+            position: relative;
+        }
+
+        #chat> :last-child {
+            margin-bottom: 100vh;
         }
 
         #chat::-webkit-scrollbar {
@@ -160,7 +158,9 @@
             messageBubble.classList.add('message', sender);
             messageBubble.innerHTML = marked.parse(text);
             chatContainer.appendChild(messageBubble);
-            chatContainer.scrollTop = chatContainer.scrollHeight;
+            if (sender === 'user') {
+                messageBubble.scrollIntoView({ behavior: 'auto', block: 'start' });
+            }
         }
 
         function updateOrAddAssistantMessage(text, messageId) {
@@ -191,8 +191,6 @@
                 );
                 return diagramDiv;
             });
-
-            chatContainer.scrollTop = chatContainer.scrollHeight;
         }
 
         function markAssistantMessageAsFinished(messageId, context) {

@@ -10,36 +10,21 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "main": "./out/extension.js",
   "contributes": {
-    "viewsContainers": {
-      "activitybar": [
-        {
-          "id": "dviseContainer",
-          "title": "Dvise",
-          "icon": "resources/dvise-icon.svg"
-        }
-      ]
-    },
-    "views": {
-      "dviseContainer": [
-        {
-          "id": "dvise.fileExplorer",
-          "name": "Dvise File Explorer",
-          "icon": "resources/dvise-icon.svg"
-        },
-        {
-          "id": "dvise.chatView",
-          "name": "Chat Assistant",
-          "icon": "resources/dvise-icon.svg"
-        }
-      ]
-    },
     "commands": [
       {
+        "command": "dvise.openChat",
+        "title": "Open Chat",
+        "category": "Dvise"
+      },
+      {
         "command": "dvise.setApiKey",
-        "title": "Set OpenAI API Key"
+        "title": "Set OpenAI API Key",
+        "category": "Dvise"
       }
     ]
   },

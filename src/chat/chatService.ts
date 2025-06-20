@@ -40,7 +40,7 @@ async function* getResponse(history: { role: 'user' | 'assistant' | 'system'; co
     const API_KEY = await vscode.commands.executeCommand('dvise.getApiKey');
 
     const response = await axios.post(API_URL, {
-        model: 'gpt-4.1-nano',
+        model: 'gpt-4.1-mini',
         messages: history,
         stream: stream
     }, {

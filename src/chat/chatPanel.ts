@@ -32,7 +32,7 @@ export class ChatPanel {
                 ChatPanel.viewType,
                 'Chat Assistant',
                 vscode.ViewColumn.Beside, // Opens in a new tab
-                { enableScripts: true }
+                { enableScripts: true, retainContextWhenHidden: true }
             );
             new ChatPanel(context, panel);
         }

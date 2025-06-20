@@ -1,5 +1,4 @@
 import * as vscode from 'vscode';
-import { FileExplorerView } from './fileExplorer/fileExplorerView';
 import { ChatPanel } from './chat/chatPanel';
 import { HoverProvider } from './editor/hoverProvider';
 import { VisualizeCodeLensProvider } from './editor/codelensProvider';
@@ -29,12 +28,6 @@ export async function activate(context: vscode.ExtensionContext) {
 		vscode.commands.executeCommand('dvise.setApiKey');
 	}
 
-	// 
-
-	// Register file explorer
-	const fileExplorer = new FileExplorerView(context);
-	context.subscriptions.push(vscode.window.registerTreeDataProvider('dvise.fileExplorer', fileExplorer));
-
 	// Register chat panel command
 	context.subscriptions.push(
 		vscode.commands.registerCommand('dvise.openChat', () => {
@@ -53,7 +46,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
 	// Register command to visualize code
 	context.subscriptions.push(vscode.commands.registerCommand('dvise.visualizeCode', async (args) => {
-		if (!args || !args.text || !args.document || !args.startLine) {
+		if (!args || !args.text || !args.document || args.startLine === undefined || args.startLine === null) {
 			vscode.window.showErrorMessage('No code to visualize.');
 			return;
 		}
